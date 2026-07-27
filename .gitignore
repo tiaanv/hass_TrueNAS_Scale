@@ -1,0 +1,33 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Pytest / Coverage / Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.nox/
+.tox/
+
+# Python Virtual Environments
+venv/
+.venv/
+env/
+.env/
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Local TrueNAS API documentation catalogs
+truenas-v25.10.4-docs/
+truenas-v26.0.0-docs/
+truenas-v27.0.0-docs/

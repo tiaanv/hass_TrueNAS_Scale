@@ -1,0 +1,12 @@
+{
+  "domain": "truenas_scale",
+  "name": "TrueNAS SCALE",
+  "codeowners": ["@hurricaneb"],
+  "config_flow": true,
+  "documentation": "https://github.com/hurricaneb/hass_TrueNAS_Scale",
+  "integration_type": "hub",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/hurricaneb/hass_TrueNAS_Scale/issues",
+  "requirements": ["aiohttp>=3.8.0"],
+  "version": "1.0.0"
+}

@@ -1,0 +1,26 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to TrueNAS SCALE",
+        "description": "Enter connection parameters for TrueNAS SCALE.",
+        "data": {
+          "host": "Host / IP Address",
+          "api_key": "API Key",
+          "username": "Username",
+          "port": "Port",
+          "ssl": "Use SSL (wss://)",
+          "verify_ssl": "Verify SSL Certificate"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to TrueNAS Scale WebSocket.",
+      "invalid_auth": "Invalid API key or authentication failed.",
+      "unknown": "Unexpected error occurred."
+    },
+    "abort": {
+      "already_configured": "Device is already configured."
+    }
+  }
+}

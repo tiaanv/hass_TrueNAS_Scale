@@ -1,0 +1,26 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Anslut till TrueNAS SCALE",
+        "description": "Ange anslutningsuppgifter för TrueNAS SCALE.",
+        "data": {
+          "host": "Värdnamn / IP-adress",
+          "api_key": "API-nyckel",
+          "username": "Användarnamn",
+          "port": "Port",
+          "ssl": "Använd SSL (wss://)",
+          "verify_ssl": "Verifiera SSL-certifikat"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Kunde inte ansluta till TrueNAS Scale WebSocket.",
+      "invalid_auth": "Ogiltig API-nyckel eller autentiseringsfel.",
+      "unknown": "Ett oväntat fel uppstod."
+    },
+    "abort": {
+      "already_configured": "Enheten är redan konfigurerad."
+    }
+  }
+}
