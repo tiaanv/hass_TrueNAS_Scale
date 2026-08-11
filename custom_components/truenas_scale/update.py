@@ -45,7 +45,7 @@ class TrueNASAppUpdateEntity(CoordinatorEntity, UpdateEntity):
         super().__init__(coordinator)
         self.entry = entry
         self.app_name = app_name
-        self._attr_name = app_name
+        self._attr_name = app_name.replace("_", " ").title()
         self._attr_unique_id = f"{entry.entry_id}_app_update_{app_name}"
         self._attr_supported_features = (
             UpdateEntityFeature.INSTALL | UpdateEntityFeature.RELEASE_NOTES
@@ -90,19 +90,23 @@ class TrueNASAppUpdateEntity(CoordinatorEntity, UpdateEntity):
     def latest_version(self) -> Optional[str]:
         apps = self.coordinator.data.get(DATA_APPS, {})
         app = apps.get(self.app_name, {})
+        upgrade_avail = app.get("upgrade_available") is True or app.get("upgrade") is True
         upgrade_version = (
             app.get("upgrade_available_version")
             or app.get("available_version")
             or app.get("latest_version")
+            or app.get("human_available_version")
+            or app.get("catalog_version")
         )
-        if upgrade_version:
-            return upgrade_version
+        inst = self.installed_version
 
-        # If TrueNAS indicates an upgrade is available but version string is missing
-        if app.get("upgrade_available") is True:
-            return f"{self.installed_version} (Update Available)"
+        if upgrade_version and str(upgrade_version) != str(inst):
+            return str(upgrade_version)
 
-        return self.installed_version
+        if upgrade_avail:
+            return f"{inst} (Update)" if inst else "Update Available"
+
+        return inst
 
     @property
     def release_summary(self) -> Optional[str]:
