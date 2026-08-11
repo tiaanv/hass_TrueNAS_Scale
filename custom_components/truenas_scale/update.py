@@ -1,5 +1,6 @@
-"""Update platform for TrueNAS Scale 26 integration."""
+"""Update platform for TrueNAS Scale integration."""
 
+import logging
 from typing import Any, Dict, Optional
 
 from homeassistant.components.update import (
@@ -12,6 +13,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DATA_APPS, DATA_SYSTEM_INFO, DOMAIN
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -44,7 +47,9 @@ class TrueNASAppUpdateEntity(CoordinatorEntity, UpdateEntity):
         self.app_name = app_name
         self._attr_name = f"App {app_name}"
         self._attr_unique_id = f"{entry.entry_id}_app_update_{app_name}"
-        self._attr_supported_features = UpdateEntityFeature.RELEASE_NOTES
+        self._attr_supported_features = (
+            UpdateEntityFeature.INSTALL | UpdateEntityFeature.RELEASE_NOTES
+        )
 
     @property
     def device_info(self) -> Dict[str, Any]:
@@ -85,7 +90,36 @@ class TrueNASAppUpdateEntity(CoordinatorEntity, UpdateEntity):
     def latest_version(self) -> Optional[str]:
         apps = self.coordinator.data.get(DATA_APPS, {})
         app = apps.get(self.app_name, {})
-        upgrade_version = app.get("upgrade_available_version") or app.get("latest_version")
+        upgrade_version = (
+            app.get("upgrade_available_version")
+            or app.get("available_version")
+            or app.get("latest_version")
+        )
         if upgrade_version:
             return upgrade_version
+
+        # If TrueNAS indicates an upgrade is available but version string is missing
+        if app.get("upgrade_available") is True:
+            return f"{self.installed_version} (Update Available)"
+
         return self.installed_version
+
+    @property
+    def release_summary(self) -> Optional[str]:
+        apps = self.coordinator.data.get(DATA_APPS, {})
+        app = apps.get(self.app_name, {})
+        latest = self.latest_version
+        if app.get("upgrade_available") is True or latest != self.installed_version:
+            return f"An update for {self.app_name} is available in TrueNAS SCALE."
+        return None
+
+    async def async_install(self, version: Optional[str], backup: bool, **kwargs: Any) -> None:
+        """Install an update for the app directly from Home Assistant."""
+        _LOGGER.info("Installing update for TrueNAS App '%s'", self.app_name)
+        try:
+            await self.coordinator.client.async_upgrade_app(self.app_name)
+        except Exception as err:
+            _LOGGER.error("Failed to upgrade TrueNAS App '%s': %s", self.app_name, err)
+            raise
+        finally:
+            await self.coordinator.async_request_refresh()
