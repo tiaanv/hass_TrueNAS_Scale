@@ -406,10 +406,13 @@ class TrueNASScaleClient:
     async def async_upgrade_app(self, app_name: str) -> Any:
         """Upgrade an application to the latest version."""
         try:
-            return await self.call("app.upgrade", [app_name])
+            return await self.call("app.upgrade", {"app_name": app_name})
         except Exception:
             try:
-                return await self.call("app.upgrade", [app_name, {}])
+                return await self.call("app.upgrade", [app_name])
             except Exception:
-                return await self.call("chart.release.upgrade", [app_name])
+                try:
+                    return await self.call("chart.release.upgrade", {"release_name": app_name})
+                except Exception:
+                    return await self.call("chart.release.upgrade", [app_name])
 

@@ -45,7 +45,7 @@ class TrueNASAppUpdateEntity(CoordinatorEntity, UpdateEntity):
         super().__init__(coordinator)
         self.entry = entry
         self.app_name = app_name
-        self._attr_name = f"App {app_name}"
+        self._attr_name = app_name
         self._attr_unique_id = f"{entry.entry_id}_app_update_{app_name}"
         self._attr_supported_features = (
             UpdateEntityFeature.INSTALL | UpdateEntityFeature.RELEASE_NOTES
