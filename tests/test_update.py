@@ -3,8 +3,13 @@
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
-from custom_components.truenas_scale.const import DATA_APPS
-from custom_components.truenas_scale.update import TrueNASAppUpdateEntity
+from homeassistant.components.update import UpdateEntityFeature
+
+from custom_components.truenas_scale.const import DATA_APPS, DATA_SYSTEM_INFO, DOMAIN
+from custom_components.truenas_scale.update import (
+    TrueNASAppUpdateEntity,
+    async_setup_entry,
+)
 
 
 class TestTrueNASUpdateEntities(unittest.IsolatedAsyncioTestCase):
@@ -44,3 +49,175 @@ class TestTrueNASUpdateEntities(unittest.IsolatedAsyncioTestCase):
 
         self.coordinator.client.async_upgrade_app.assert_called_with("plex")
         self.assertTrue(self.coordinator.async_request_refresh.called)
+
+    def test_display_name_falls_back_to_slug(self):
+        # No "title" anywhere in the app data: fall back to a title-cased
+        # version of the app's slug/name.
+        update_entity = TrueNASAppUpdateEntity(self.coordinator, self.entry, "plex")
+
+        self.assertEqual(update_entity.name, "Plex")
+        self.assertEqual(update_entity._attr_title, "Plex")
+
+    def test_display_name_prefers_catalog_metadata_title(self):
+        # TrueNAS catalog apps commonly expose a nicer name under
+        # metadata.title (e.g. "Plex Media Server" instead of "plex").
+        self.coordinator.data[DATA_APPS]["plex"]["metadata"] = {
+            "title": "Plex Media Server"
+        }
+        update_entity = TrueNASAppUpdateEntity(self.coordinator, self.entry, "plex")
+
+        self.assertEqual(update_entity.name, "Plex Media Server")
+        self.assertEqual(update_entity._attr_title, "Plex Media Server")
+
+    def test_display_name_prefers_top_level_title_over_metadata(self):
+        self.coordinator.data[DATA_APPS]["plex"]["title"] = "Plex (top-level)"
+        self.coordinator.data[DATA_APPS]["plex"]["metadata"] = {
+            "title": "Plex Media Server"
+        }
+        update_entity = TrueNASAppUpdateEntity(self.coordinator, self.entry, "plex")
+
+        self.assertEqual(update_entity.name, "Plex (top-level)")
+
+    def test_title_attribute_used_by_frontend_distinguishes_from_device_name(self):
+        # UpdateEntity.title is what the frontend shows instead of the
+        # entity/device name; it must reflect the app, not "TrueNAS".
+        update_entity = TrueNASAppUpdateEntity(self.coordinator, self.entry, "plex")
+
+        self.assertEqual(update_entity.title, "Plex")
+        self.assertNotIn("TrueNAS", update_entity.title)
+
+    def test_release_summary_uses_app_display_name(self):
+        update_entity = TrueNASAppUpdateEntity(self.coordinator, self.entry, "plex")
+
+        self.assertEqual(
+            update_entity.release_summary,
+            "An update for Plex is available in TrueNAS SCALE.",
+        )
+
+    def test_release_summary_none_when_up_to_date(self):
+        self.coordinator.data[DATA_APPS]["plex"]["upgrade_available"] = False
+        self.coordinator.data[DATA_APPS]["plex"]["available_version"] = "1.32.0"
+        update_entity = TrueNASAppUpdateEntity(self.coordinator, self.entry, "plex")
+
+        self.assertIsNone(update_entity.release_summary)
+
+    def test_supported_features_does_not_claim_release_notes(self):
+        # release_notes()/async_release_notes() are not implemented, so the
+        # RELEASE_NOTES feature must not be advertised (the base UpdateEntity
+        # raises NotImplementedError if the frontend requests them).
+        update_entity = TrueNASAppUpdateEntity(self.coordinator, self.entry, "plex")
+
+        self.assertEqual(update_entity.supported_features, UpdateEntityFeature.INSTALL)
+
+    def test_icon(self):
+        update_entity = TrueNASAppUpdateEntity(self.coordinator, self.entry, "plex")
+        self.assertEqual(update_entity.icon, "mdi:cube-outline")
+
+    def test_device_info(self):
+        self.coordinator.data[DATA_SYSTEM_INFO] = {
+            "hostname": "truenas-scale",
+            "model": "TRUENAS-CUSTOM",
+            "version": "26.0.0",
+        }
+        update_entity = TrueNASAppUpdateEntity(self.coordinator, self.entry, "plex")
+
+        info = update_entity.device_info
+        self.assertEqual(info["identifiers"], {(DOMAIN, "test_entry")})
+        self.assertEqual(info["name"], "TrueNAS (truenas-scale)")
+        self.assertEqual(info["manufacturer"], "iXsystems")
+        self.assertEqual(info["model"], "TRUENAS-CUSTOM")
+        self.assertEqual(info["sw_version"], "26.0.0")
+
+    def test_device_info_falls_back_when_system_info_missing(self):
+        # No DATA_SYSTEM_INFO in coordinator.data: fall back to the config
+        # entry's host and the hardcoded defaults.
+        update_entity = TrueNASAppUpdateEntity(self.coordinator, self.entry, "plex")
+
+        info = update_entity.device_info
+        self.assertEqual(info["name"], "TrueNAS (192.168.1.100)")
+        self.assertEqual(info["model"], "TrueNAS Scale")
+        self.assertEqual(info["sw_version"], "26.0")
+
+    def test_entity_picture_falls_back_to_metadata_icon(self):
+        self.coordinator.data[DATA_APPS]["plex"].pop("icon_url", None)
+        self.coordinator.data[DATA_APPS]["plex"]["metadata"] = {
+            "icon": "https://plex.tv/metadata-icon.png"
+        }
+        update_entity = TrueNASAppUpdateEntity(self.coordinator, self.entry, "plex")
+
+        self.assertEqual(
+            update_entity.entity_picture, "https://plex.tv/metadata-icon.png"
+        )
+
+    def test_entity_picture_none_when_no_icon_available(self):
+        self.coordinator.data[DATA_APPS]["plex"].pop("icon_url", None)
+        update_entity = TrueNASAppUpdateEntity(self.coordinator, self.entry, "plex")
+
+        self.assertIsNone(update_entity.entity_picture)
+
+    def test_entity_picture_none_for_non_http_icon(self):
+        self.coordinator.data[DATA_APPS]["plex"]["icon_url"] = "data:image/png;base64,xxx"
+        update_entity = TrueNASAppUpdateEntity(self.coordinator, self.entry, "plex")
+
+        self.assertIsNone(update_entity.entity_picture)
+
+    def test_latest_version_update_available_without_explicit_version(self):
+        # upgrade_available is True but no version fields are provided at
+        # all: still surface something meaningful rather than nothing.
+        self.coordinator.data[DATA_APPS]["plex"] = {
+            "name": "plex",
+            "upgrade_available": True,
+        }
+        update_entity = TrueNASAppUpdateEntity(self.coordinator, self.entry, "plex")
+
+        self.assertEqual(update_entity.latest_version, "Update Available")
+
+    async def test_async_install_error_still_refreshes_and_reraises(self):
+        self.coordinator.client.async_upgrade_app = AsyncMock(
+            side_effect=RuntimeError("Upgrade failed")
+        )
+        update_entity = TrueNASAppUpdateEntity(self.coordinator, self.entry, "plex")
+
+        with self.assertRaises(RuntimeError):
+            await update_entity.async_install(version=None, backup=False)
+
+        self.assertTrue(self.coordinator.async_request_refresh.called)
+
+
+class TestTrueNASUpdateSetupEntry(unittest.IsolatedAsyncioTestCase):
+    """Test the update platform's async_setup_entry."""
+
+    async def test_async_setup_entry_creates_entity_per_app(self):
+        coordinator = MagicMock()
+        coordinator.data = {
+            DATA_APPS: {
+                "plex": {"name": "plex"},
+                "sonarr": {"name": "sonarr"},
+            }
+        }
+        entry = MagicMock()
+        entry.entry_id = "test_entry"
+        hass = MagicMock()
+        hass.data = {DOMAIN: {"test_entry": {"coordinator": coordinator}}}
+
+        added_entities = []
+        async_add_entities = MagicMock(side_effect=lambda entities: added_entities.extend(entities))
+
+        await async_setup_entry(hass, entry, async_add_entities)
+
+        self.assertEqual(len(added_entities), 2)
+        self.assertTrue(async_add_entities.called)
+
+    async def test_async_setup_entry_no_apps(self):
+        coordinator = MagicMock()
+        coordinator.data = {DATA_APPS: {}}
+        entry = MagicMock()
+        entry.entry_id = "test_entry"
+        hass = MagicMock()
+        hass.data = {DOMAIN: {"test_entry": {"coordinator": coordinator}}}
+
+        async_add_entities = MagicMock()
+
+        await async_setup_entry(hass, entry, async_add_entities)
+
+        async_add_entities.assert_called_once_with([])

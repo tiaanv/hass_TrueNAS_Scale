@@ -16,6 +16,7 @@ from homeassistant.const import (
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -102,7 +103,7 @@ class TrueNASBaseSensor(CoordinatorEntity, SensorEntity):
         self._attr_has_entity_name = True
 
     @property
-    def device_info(self) -> Dict[str, Any]:
+    def device_info(self) -> DeviceInfo:
         sys_info = self.coordinator.data.get(DATA_SYSTEM_INFO, {})
         hostname = sys_info.get("hostname", self.entry.data["host"])
         version = sys_info.get("version", "26.0")
@@ -460,11 +461,17 @@ class TrueNASPoolUsageSensor(TrueNASBaseSensor):
         used_bytes, avail_bytes = _get_pool_dataset_bytes(self.coordinator, self.pool_name)
         attrs: Dict[str, Any] = {}
         if avail_bytes is not None:
-            attrs["available_bytes"] = int(avail_bytes)
-            attrs["available_gb"] = round(float(avail_bytes) / (1024**3), 2)
+            try:
+                attrs["available_bytes"] = int(avail_bytes)
+                attrs["available_gb"] = round(float(avail_bytes) / (1024**3), 2)
+            except (ValueError, TypeError):
+                avail_bytes = None
         if used_bytes is not None:
-            attrs["used_bytes"] = int(used_bytes)
-            attrs["used_gb"] = round(float(used_bytes) / (1024**3), 2)
+            try:
+                attrs["used_bytes"] = int(used_bytes)
+                attrs["used_gb"] = round(float(used_bytes) / (1024**3), 2)
+            except (ValueError, TypeError):
+                used_bytes = None
         if used_bytes is not None and avail_bytes is not None:
             tot = float(used_bytes) + float(avail_bytes)
             attrs["total_usable_gb"] = round(tot / (1024**3), 2)
@@ -517,13 +524,19 @@ class TrueNASPoolFreeSensor(TrueNASBaseSensor):
         used_bytes, avail_bytes = _get_pool_dataset_bytes(self.coordinator, self.pool_name)
         attrs: Dict[str, Any] = {}
         if avail_bytes is not None:
-            attrs["available_bytes"] = int(avail_bytes)
-            attrs["available_gb"] = round(float(avail_bytes) / (1000**3), 2)
-            attrs["available_tib"] = round(float(avail_bytes) / (1024**4), 2)
+            try:
+                attrs["available_bytes"] = int(avail_bytes)
+                attrs["available_gb"] = round(float(avail_bytes) / (1000**3), 2)
+                attrs["available_tib"] = round(float(avail_bytes) / (1024**4), 2)
+            except (ValueError, TypeError):
+                avail_bytes = None
         if used_bytes is not None:
-            attrs["used_bytes"] = int(used_bytes)
-            attrs["used_gb"] = round(float(used_bytes) / (1000**3), 2)
-            attrs["used_tib"] = round(float(used_bytes) / (1024**4), 2)
+            try:
+                attrs["used_bytes"] = int(used_bytes)
+                attrs["used_gb"] = round(float(used_bytes) / (1000**3), 2)
+                attrs["used_tib"] = round(float(used_bytes) / (1024**4), 2)
+            except (ValueError, TypeError):
+                used_bytes = None
         if used_bytes is not None and avail_bytes is not None:
             tot = float(used_bytes) + float(avail_bytes)
             attrs["total_usable_gb"] = round(tot / (1000**3), 2)
@@ -572,13 +585,19 @@ class TrueNASPoolUsedSpaceSensor(TrueNASBaseSensor):
         used_bytes, avail_bytes = _get_pool_dataset_bytes(self.coordinator, self.pool_name)
         attrs: Dict[str, Any] = {}
         if used_bytes is not None:
-            attrs["used_bytes"] = int(used_bytes)
-            attrs["used_gb"] = round(float(used_bytes) / (1000**3), 2)
-            attrs["used_tib"] = round(float(used_bytes) / (1024**4), 2)
+            try:
+                attrs["used_bytes"] = int(used_bytes)
+                attrs["used_gb"] = round(float(used_bytes) / (1000**3), 2)
+                attrs["used_tib"] = round(float(used_bytes) / (1024**4), 2)
+            except (ValueError, TypeError):
+                pass
         if avail_bytes is not None:
-            attrs["available_bytes"] = int(avail_bytes)
-            attrs["available_gb"] = round(float(avail_bytes) / (1000**3), 2)
-            attrs["available_tib"] = round(float(avail_bytes) / (1024**4), 2)
+            try:
+                attrs["available_bytes"] = int(avail_bytes)
+                attrs["available_gb"] = round(float(avail_bytes) / (1000**3), 2)
+                attrs["available_tib"] = round(float(avail_bytes) / (1024**4), 2)
+            except (ValueError, TypeError):
+                pass
         return attrs
 
     @property
@@ -621,10 +640,13 @@ class TrueNASPoolUsableCapacitySensor(TrueNASBaseSensor):
         used_bytes, avail_bytes = _get_pool_dataset_bytes(self.coordinator, self.pool_name)
         attrs: Dict[str, Any] = {}
         if used_bytes is not None and avail_bytes is not None:
-            tot = float(used_bytes) + float(avail_bytes)
-            attrs["total_usable_bytes"] = int(tot)
-            attrs["total_usable_gb"] = round(tot / (1000**3), 2)
-            attrs["total_usable_tib"] = round(tot / (1024**4), 2)
+            try:
+                tot = float(used_bytes) + float(avail_bytes)
+                attrs["total_usable_bytes"] = int(tot)
+                attrs["total_usable_gb"] = round(tot / (1000**3), 2)
+                attrs["total_usable_tib"] = round(tot / (1024**4), 2)
+            except (ValueError, TypeError):
+                pass
         return attrs
 
     @property

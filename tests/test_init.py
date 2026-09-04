@@ -3,6 +3,7 @@
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
@@ -102,6 +103,7 @@ class TestTrueNASInit(unittest.IsolatedAsyncioTestCase):
 
         entry = MagicMock()
         entry.entry_id = "test_entry_id"
+        entry.state = ConfigEntryState.SETUP_IN_PROGRESS
         entry.data = {
             CONF_HOST: "192.168.1.100",
             CONF_API_KEY: "key",
@@ -111,8 +113,15 @@ class TestTrueNASInit(unittest.IsolatedAsyncioTestCase):
             CONF_VERIFY_SSL: False,
         }
 
-        with patch("custom_components.truenas_scale.TrueNASScaleClient") as mock_client_cls:
+        with patch(
+            "custom_components.truenas_scale.async_get_clientsession",
+            return_value=MagicMock(),
+        ), patch("custom_components.truenas_scale.TrueNASScaleClient") as mock_client_cls:
             client_mock = AsyncMock()
+            # register_callback is a synchronous, fire-and-forget method on the
+            # real client; AsyncMock would make it return an unawaited
+            # coroutine, tripping asyncio's "never awaited" warning.
+            client_mock.register_callback = MagicMock()
             mock_client_cls.return_value = client_mock
 
             setup_ok = await async_setup_entry(hass, entry)
@@ -121,6 +130,78 @@ class TestTrueNASInit(unittest.IsolatedAsyncioTestCase):
 
             unload_ok = await async_unload_entry(hass, entry)
             self.assertTrue(unload_ok)
+
+    async def test_async_setup_entry_subscribe_failure_is_warning_only(self):
+        # A failed event subscription must not abort setup - only connect()
+        # failures are fatal.
+        hass = MagicMock()
+        hass.data = {}
+        hass.config_entries = MagicMock()
+        hass.config_entries.async_forward_entry_setups = AsyncMock(return_value=True)
+
+        entry = MagicMock()
+        entry.entry_id = "test_entry_id"
+        entry.state = ConfigEntryState.SETUP_IN_PROGRESS
+        entry.data = {
+            CONF_HOST: "192.168.1.100",
+            CONF_API_KEY: "key",
+            CONF_USERNAME: "root",
+            CONF_PORT: 443,
+            CONF_SSL: True,
+            CONF_VERIFY_SSL: False,
+        }
+
+        with patch(
+            "custom_components.truenas_scale.async_get_clientsession",
+            return_value=MagicMock(),
+        ), patch("custom_components.truenas_scale.TrueNASScaleClient") as mock_client_cls:
+            client_mock = AsyncMock()
+            client_mock.register_callback = MagicMock()
+            client_mock.subscribe.side_effect = Exception("Subscribe not supported")
+            mock_client_cls.return_value = client_mock
+
+            setup_ok = await async_setup_entry(hass, entry)
+            self.assertTrue(setup_ok)
+
+    async def test_async_setup_entry_registers_event_callback(self):
+        # The callback registered with the client must trigger a coordinator
+        # refresh when TrueNAS pushes a WebSocket event.
+        hass = MagicMock()
+        hass.data = {}
+        hass.config_entries = MagicMock()
+        hass.config_entries.async_forward_entry_setups = AsyncMock(return_value=True)
+
+        entry = MagicMock()
+        entry.entry_id = "test_entry_id"
+        entry.state = ConfigEntryState.SETUP_IN_PROGRESS
+        entry.data = {
+            CONF_HOST: "192.168.1.100",
+            CONF_API_KEY: "key",
+            CONF_USERNAME: "root",
+            CONF_PORT: 443,
+            CONF_SSL: True,
+            CONF_VERIFY_SSL: False,
+        }
+
+        with patch(
+            "custom_components.truenas_scale.async_get_clientsession",
+            return_value=MagicMock(),
+        ), patch("custom_components.truenas_scale.TrueNASScaleClient") as mock_client_cls:
+            client_mock = AsyncMock()
+            client_mock.register_callback = MagicMock()
+            mock_client_cls.return_value = client_mock
+
+            await async_setup_entry(hass, entry)
+
+            client_mock.register_callback.assert_called_once()
+            handle_event = client_mock.register_callback.call_args[0][0]
+            handle_event({"some": "event"})
+
+            self.assertTrue(hass.async_create_task.called)
+            # hass is a MagicMock, so the coroutine passed to
+            # async_create_task is never actually scheduled/awaited; close it
+            # explicitly to avoid a "coroutine was never awaited" warning.
+            hass.async_create_task.call_args[0][0].close()
 
     async def test_async_setup_entry_not_ready(self):
         hass = MagicMock()
@@ -136,7 +217,10 @@ class TestTrueNASInit(unittest.IsolatedAsyncioTestCase):
             CONF_VERIFY_SSL: False,
         }
 
-        with patch("custom_components.truenas_scale.TrueNASScaleClient") as mock_client_cls:
+        with patch(
+            "custom_components.truenas_scale.async_get_clientsession",
+            return_value=MagicMock(),
+        ), patch("custom_components.truenas_scale.TrueNASScaleClient") as mock_client_cls:
             client_mock = AsyncMock()
             client_mock.connect.side_effect = Exception("Unreachable")
             mock_client_cls.return_value = client_mock

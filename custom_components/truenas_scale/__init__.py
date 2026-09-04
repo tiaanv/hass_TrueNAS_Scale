@@ -47,10 +47,16 @@ PLATFORMS: list[Platform] = [
 class TrueNASCoordinator(DataUpdateCoordinator):
     """Coordinator for fetching TrueNAS Scale data."""
 
-    def __init__(self, hass: HomeAssistant, client: TrueNASScaleClient) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        client: TrueNASScaleClient,
+        config_entry: ConfigEntry | None = None,
+    ) -> None:
         super().__init__(
             hass,
             _LOGGER,
+            config_entry=config_entry,
             name=DOMAIN,
             update_interval=timedelta(seconds=UPDATE_INTERVAL_SECONDS),
         )
@@ -138,7 +144,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except Exception as err:
         raise ConfigEntryNotReady(f"Could not connect to TrueNAS Scale: {err}") from err
 
-    coordinator = TrueNASCoordinator(hass, client)
+    coordinator = TrueNASCoordinator(hass, client, entry)
     await coordinator.async_config_entry_first_refresh()
 
     def handle_event(params: dict) -> None:

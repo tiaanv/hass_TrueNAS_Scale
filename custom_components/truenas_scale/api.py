@@ -73,6 +73,11 @@ class TrueNASScaleClient:
         self._connected = False
 
     @property
+    def is_connected(self) -> bool:
+        """Return True if currently connected to the TrueNAS WebSocket API."""
+        return self._connected
+
+    @property
     def ws_url(self) -> str:
         """Construct WebSocket URL."""
         protocol = "wss" if self.use_ssl else "ws"
@@ -151,6 +156,7 @@ class TrueNASScaleClient:
             self._listen_task.cancel()
         if self._ws and not self._ws.closed:
             await self._ws.close()
+        self._ws = None
         if self._own_session and self._session:
             await self._session.close()
 

@@ -1,11 +1,12 @@
 """Switch platform for TrueNAS Scale 26 integration."""
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -57,7 +58,7 @@ class TrueNASBaseSwitch(CoordinatorEntity, SwitchEntity):
         self._attr_has_entity_name = True
 
     @property
-    def device_info(self) -> Dict[str, Any]:
+    def device_info(self) -> DeviceInfo:
         sys_info = self.coordinator.data.get(DATA_SYSTEM_INFO, {})
         hostname = sys_info.get("hostname", self.entry.data["host"])
         return {

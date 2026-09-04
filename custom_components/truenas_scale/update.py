@@ -1,7 +1,7 @@
 """Update platform for TrueNAS Scale integration."""
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from homeassistant.components.update import (
     UpdateEntity,
@@ -9,6 +9,7 @@ from homeassistant.components.update import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -45,14 +46,30 @@ class TrueNASAppUpdateEntity(CoordinatorEntity, UpdateEntity):
         super().__init__(coordinator)
         self.entry = entry
         self.app_name = app_name
-        self._attr_name = app_name.replace("_", " ").title()
+        display_name = self._get_display_name(coordinator, app_name)
+        self._attr_name = display_name
+        # "title" is the software's own name, as opposed to the device/entity
+        # name ("TrueNAS (host)"). The frontend (update overview, dialogs and
+        # notifications) shows this instead of the entity name when set.
+        self._attr_title = display_name
         self._attr_unique_id = f"{entry.entry_id}_app_update_{app_name}"
-        self._attr_supported_features = (
-            UpdateEntityFeature.INSTALL | UpdateEntityFeature.RELEASE_NOTES
+        self._attr_supported_features = UpdateEntityFeature.INSTALL
+
+    @staticmethod
+    def _get_display_name(coordinator, app_name: str) -> str:
+        """Return a human-friendly app name, preferring catalog metadata."""
+        apps = coordinator.data.get(DATA_APPS, {})
+        app = apps.get(app_name, {})
+        metadata = app.get("metadata")
+        title = app.get("title") or (
+            metadata.get("title") if isinstance(metadata, dict) else None
         )
+        if isinstance(title, str) and title.strip():
+            return title.strip()
+        return app_name.replace("_", " ").title()
 
     @property
-    def device_info(self) -> Dict[str, Any]:
+    def device_info(self) -> DeviceInfo:
         sys_info = self.coordinator.data.get(DATA_SYSTEM_INFO, {})
         hostname = sys_info.get("hostname", self.entry.data["host"])
         return {
@@ -114,7 +131,7 @@ class TrueNASAppUpdateEntity(CoordinatorEntity, UpdateEntity):
         app = apps.get(self.app_name, {})
         latest = self.latest_version
         if app.get("upgrade_available") is True or latest != self.installed_version:
-            return f"An update for {self.app_name} is available in TrueNAS SCALE."
+            return f"An update for {self._attr_title} is available in TrueNAS SCALE."
         return None
 
     async def async_install(self, version: Optional[str], backup: bool, **kwargs: Any) -> None:
